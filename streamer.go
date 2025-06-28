@@ -13,6 +13,7 @@ type streamer struct {
 	address string
 	serialPort io.ReadWriteCloser
 	isConnected bool
+	dontReconnect bool
 }
 
 func (s *streamer) Init(addr string) error {
@@ -70,6 +71,7 @@ func (s *streamer) Reconnect() error {
 
 
 func (s *streamer) Close() {
+	s.dontReconnect = true
 	s.serialPort.Close()
 	s.isConnected = false
 }

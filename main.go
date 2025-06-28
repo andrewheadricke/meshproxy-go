@@ -9,6 +9,8 @@ import (
 	"flag"
 	"bytes"
 	"strings"
+	"syscall"
+	"os/signal"	
 
 	pb "example.com/meshproxy-go/gomeshproto"
 	"google.golang.org/protobuf/proto"
@@ -22,63 +24,38 @@ const start1 = byte(0x94)
 const start2 = byte(0xc3)
 
 var portFlag string
-var dbDumpFlag bool
+var dbDumpFlag string
 var noLogFlag bool
 var showPacketsFlag bool
+var indexFlag bool
+
 var connections []*net.Conn
-var db *bolt.DB
+
 
 func main() {
 
 	flag.StringVar(&portFlag, "port", "/dev/ttyACM0", "serial port address")
-	flag.BoolVar(&dbDumpFlag, "dump", false, "write db contents to stdout")
+	flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex)")
 	flag.BoolVar(&noLogFlag, "nolog", false, "dont disply log output")
 	flag.BoolVar(&showPacketsFlag, "showpackets", false, "show packets on output")
+	flag.BoolVar(&indexFlag, "index", false, "index nodes")
   flag.Parse()  // after declaring flags we need to call it
 
-	var err error
-	db, err = bolt.Open("database.db", 0600, nil)
-	if err != nil {
-		log.Fatal(err)
+	s := &streamer{}
+	ListenForShutdown(s)
+	InitDb()
+
+	if len(dbDumpFlag) > 0 {
+		DumpDb(dbDumpFlag)
+		os.Exit(0)
 	}
-	defer db.Close()	
 
-	db.Update(func(tx *bolt.Tx) error {
-		_, err := tx.CreateBucketIfNotExists([]byte("nodes"))
-		if err != nil {
-			fmt.Printf("create bucket error: %s", err)
-			os.Exit(1)
-		}
-		return nil
-	})
-
-	if dbDumpFlag {
-		db.View(func(tx *bolt.Tx) error {
-			b := tx.Bucket([]byte("nodes"))
-			if err != nil {
-				fmt.Printf("get bucket error: %s", err)
-				os.Exit(1)
-			}
-			c := b.Cursor()
-			counter := 0
-			for k, v := c.First(); k != nil; k, v = c.Next() {
-				counter++
-				nodeInfo := pb.NodeInfo{}
-				if err := proto.Unmarshal(v, &nodeInfo); err != nil {
-					fmt.Printf("Error unmarshalling: %+v\n", err)
-				} else {
-					fmt.Printf("%s -> %s\n\n", k, nodeInfo.String())
-				}
-			}
-			fmt.Printf("Node count: %d\n", counter)
-			return nil
-		})
+	if indexFlag {
+		IndexDb()
 		os.Exit(0)
 	}
 	
-	s := &streamer{}
 	s.Init(portFlag)
-	defer s.Close()
 
 	l, err := net.Listen("tcp", ":4403")
 	if err != nil {
@@ -115,6 +92,26 @@ func main() {
 	}	
 }
 
+func ListenForShutdown(s *streamer) {
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Printf("\nExiting...\n")
+		fmt.Printf("Closing TCP Connections\n")
+		for _, c := range connections {
+			(*c).Close()
+		}
+
+		fmt.Printf("Closing Serial connection\n")
+		s.Close()
+
+		fmt.Printf("Closing Db\n")
+		CloseDb()
+		os.Exit(1)
+	}()
+}
+
 func sendWantConfigId(s *io.ReadWriteCloser) {
 
 	nodeInfo := pb.ToRadio{PayloadVariant: &pb.ToRadio_WantConfigId{WantConfigId: 42}}
@@ -139,7 +136,7 @@ func handleFromRadioStream(s *streamer) {
 	c, dc := chanFromNode(&s.serialPort)
 
 	for {
-		if s.isConnected == false {
+		if s.isConnected == false && s.dontReconnect == false {
 			fmt.Printf("Lets reconnect!\n")
 			err := s.Reconnect()
 			if err != nil {
@@ -153,13 +150,15 @@ func handleFromRadioStream(s *streamer) {
 			case logString := <- dc:
 				if logString == "SERIALPORTCLOSED" {
 					s.isConnected = false
-					fmt.Printf("Reconnecting serial port\n")
-					err := s.Reconnect()
-					if err != nil {
-						continue
+					if s.dontReconnect == false {
+						fmt.Printf("Reconnecting serial port\n")
+						err := s.Reconnect()
+						if err != nil {
+							continue
+						}
+						c, dc = chanFromNode(&s.serialPort)
+						sendWantConfigId(&s.serialPort)
 					}
-					c, dc = chanFromNode(&s.serialPort)
-					sendWantConfigId(&s.serialPort)
 				} else {
 					cleanString := strings.TrimSpace(stripansi.Strip(logString))
 					if strings.HasSuffix(cleanString, "Lost phone connection") || strings.HasSuffix(cleanString, "Start meshradio init") {
@@ -221,6 +220,9 @@ func handleFromRadioStream(s *streamer) {
 									if err := proto.Unmarshal(data, &nodeInfo); err != nil {
 										return err
 									}
+									if userInfo.LongName != nodeInfo.User.LongName {
+										fmt.Printf("Node %s renamed to %s\n", nodeInfo.User.LongName, userInfo.LongName)
+									}
 								} else {
 									fmt.Printf("New node added to DB %s\n", userInfo.LongName)
 								}
@@ -247,7 +249,15 @@ func handleFromRadioStream(s *streamer) {
 							})
 						}
 						//fmt.Printf("%+v\n", pkt)
-					}
+						if decodedPkt.GetPortnum() == pb.PortNum_POSITION_APP {
+							posInfo := pb.Position{}
+							if err := proto.Unmarshal(decodedPkt.GetPayload(), &posInfo); err != nil {
+								fmt.Printf("Error unmarshalling: %+v\n", err)
+								continue
+							}
+							fmt.Printf("%+v %+v %+v %+v %+v\n", pkt.From, *posInfo.LatitudeI, *posInfo.LongitudeI, *posInfo.Altitude, posInfo.Time)
+						}
+					}					
 				}
 		}
 	}

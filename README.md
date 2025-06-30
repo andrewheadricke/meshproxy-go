@@ -15,3 +15,10 @@ Because I have an externally mounted RAK Wisblock device paired with a Raspberry
 * Will store all unread messages if no TCP clients are connected. Only the first TCP connection will receive the stored messages.
 
 * Protobuf format up to date as of firmware v2.6.11
+
+* Much faster node sync for app clients
+
+* In the event your meshtastic device gets corrupted or resets you have a backup of your node list
+
+### Notes
+There is no security or authorization, it's a straight through proxy. Anyone that can connect to the TCP port will receive all settings on the meshtastic device. Things like Private/Public keys for the node and channels, Wifi settings incl password, MQTT username and password etc.

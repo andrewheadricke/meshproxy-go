@@ -22,7 +22,7 @@ func main() {
 	flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex)")
 	flag.BoolVar(&noLogFlag, "nolog", false, "dont disply log output")
 	flag.BoolVar(&showPacketsFlag, "showpackets", false, "show packets on output")
-	flag.BoolVar(&indexFlag, "index", false, "index nodes")
+	//flag.BoolVar(&indexFlag, "index", false, "index nodes")
   flag.Parse()  // after declaring flags we need to call it
 
 	s := &streamer{}

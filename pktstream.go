@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"strconv"
 	"encoding/binary"
 
 	bolt "go.etcd.io/bbolt"
@@ -114,19 +115,21 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 		decodedPkt := pkt.GetDecoded()
 
 		isNewNode := false
+		shouldUpdateIndex := false
 		nodeInfo, err := FetchNodeInfoByNumber(pkt.From)
+		nodeId := fmt.Sprintf("!%08x", pkt.From)
+
 		if err != nil {
 			if err.Error() != "node not found" {
 				log.Fatal(err)
 			}
 
-			isNewNode = true
+			isNewNode = true			
 			nodeInfo = pb.NodeInfo{}
 
 			if decodedPkt.GetPortnum() != pb.PortNum_NODEINFO_APP {
-				nodeId := fmt.Sprintf("%08x", pkt.From)
 				nodeInfo.User = &pb.User{
-					Id: "!" + nodeId, 
+					Id: nodeId, 
 					ShortName: nodeId[len(nodeId)-4:], 
 					LongName: "Meshtastic " + nodeId[len(nodeId)-4:],
 				}
@@ -135,7 +138,7 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 				
 		}
 
-		nodeInfo.Num = pkt.From			
+		nodeInfo.Num = pkt.From
 		nodeInfo.LastHeard = pkt.RxTime
 		hops := pkt.HopStart - pkt.HopLimit
 		nodeInfo.HopsAway = &hops
@@ -149,6 +152,14 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 			
 			if !isNewNode && userInfo.LongName != nodeInfo.User.LongName {
 				fmt.Printf("Node %s renamed to %s\n", nodeInfo.User.LongName, userInfo.LongName)
+			}
+
+			//fmt.Printf("%+v %+v - %+v %+v\n", pkt.From, nodeId, userInfo, nodeInfo)
+
+			if userInfo.Id != nodeId {
+				defaultNodeNumber, _ := strconv.ParseUint(userInfo.Id[1:], 16, 64)
+				fmt.Printf("Non default node number detected, using %d instead of %d for %s - %s\n", pkt.From, defaultNodeNumber, userInfo.Id, userInfo.LongName)
+				shouldUpdateIndex = true
 			}
 
 			nodeInfo.User = &userInfo
@@ -176,7 +187,7 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 			b := tx.Bucket([]byte("nodes"))
 			b.Put([]byte(nodeInfo.User.Id), out)
 
-			if isNewNode {
+			if isNewNode || shouldUpdateIndex {
 				b := tx.Bucket([]byte("nodeindex"))
 				nodeNumBytes := make([]byte, 4)
 				binary.LittleEndian.PutUint32(nodeNumBytes, nodeInfo.Num)
@@ -195,8 +206,9 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 				} else {
 					if !firstNodeInfoReceived {
 
-						pkt := fromRadio.GetNodeInfo()						
-						connectedNodeId = pkt.User.Id
+						nodeInfo := fromRadio.GetNodeInfo()
+						connectedNodeId = nodeInfo.User.Id
+						SaveNodeToDb(nodeInfo)
 						// dont return, so we append the firstNode to handshake list
 						firstNodeInfoReceived = true
 					} else {

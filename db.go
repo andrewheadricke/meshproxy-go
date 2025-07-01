@@ -82,7 +82,7 @@ func DumpNodeIndex() {
 func IndexDb() {
 	db.Update(func(tx *bolt.Tx) error {
 		n := tx.Bucket([]byte("nodes"))
-		nni := tx.Bucket([]byte("nodeindex"))
+		//nni := tx.Bucket([]byte("nodeindex"))
 		c := n.Cursor()
 		for k, v := c.First(); k != nil; k, v = c.Next() {
 			nodeInfo := pb.NodeInfo{}
@@ -90,9 +90,14 @@ func IndexDb() {
 				fmt.Printf("Error unmarshalling: %+v\n", err)
 				log.Fatal("not good")
 			}
-			bs := make([]byte, 4)
-    	binary.LittleEndian.PutUint32(bs, nodeInfo.Num)
-			nni.Put(bs, k)
+
+			nodeNumber := fmt.Sprintf("!%08x", nodeInfo.Num)
+			if nodeInfo.User.Id != nodeNumber {
+				fmt.Printf("%s %s\n", nodeInfo.User.Id, nodeNumber)
+			}
+			
+			//bs := make([]byte, 4)
+    	//binary.LittleEndian.PutUint32(bs, nodeInfo.Num)
 		}
 		return nil
 	})
@@ -148,4 +153,26 @@ func FetchNodeInfoByNumber(nodeNumber uint32) (pb.NodeInfo, error) {
 		return nil
 	})
 	return nodeInfo, err
+}
+
+func SaveNodeToDb(nodeInfo *pb.NodeInfo) error {
+	out, err := proto.Marshal(nodeInfo)
+	if err != nil {			
+		return err
+	}
+
+	//fmt.Printf("%+v\n", out)
+	fmt.Printf("Saving node %s\n", nodeInfo.User.LongName)
+	return db.Update(func(tx *bolt.Tx) error {
+		// update the node
+		b := tx.Bucket([]byte("nodes"))
+		b.Put([]byte(nodeInfo.User.Id), out)
+
+		// update the index too
+		bni := tx.Bucket([]byte("nodeindex"))
+		nodeNumBytes := make([]byte, 4)
+		binary.LittleEndian.PutUint32(nodeNumBytes, nodeInfo.Num)
+		bni.Put(nodeNumBytes, []byte(nodeInfo.User.Id))
+		return nil
+	})
 }

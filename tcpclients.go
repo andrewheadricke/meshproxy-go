@@ -1,124 +1,124 @@
 package main
 
 import (
-	"fmt"
-	"net"
-	"time"
-	"bytes"
-	"errors"
+  "fmt"
+  "net"
+  "time"
+  "bytes"
+  "errors"
 
-	"google.golang.org/protobuf/proto"
-	pb "example.com/meshproxy-go/gomeshproto"
+  "google.golang.org/protobuf/proto"
+  pb "example.com/meshproxy-go/gomeshproto"
 )
 
 var connections []*net.Conn
 
 func HandleTcpConnection(s *streamer, c *net.Conn) {
-	fmt.Printf("Got connection from %s\n", (*c).RemoteAddr())
-	connections = append(connections, c)
+  fmt.Printf("Got connection from %s\n", (*c).RemoteAddr())
+  connections = append(connections, c)
 
-	handshakeComplete := false
-	buf := make([]byte, 0)
+  handshakeComplete := false
+  buf := make([]byte, 0)
 
-	// wait for WantConfig, keep request Id
-	// send cached handshakeMessages (stop after PAX)
-	// iterate nodes in local db, send them
-	// send remaining cached handshakeMessages
-	// send ConfigCompleteId: [requestId]
-	// switch to full proxy mode
+  // wait for WantConfig, keep request Id
+  // send cached handshakeMessages (stop after PAX)
+  // iterate nodes in local db, send them
+  // send remaining cached handshakeMessages
+  // send ConfigCompleteId: [requestId]
+  // switch to full proxy mode
 
-	b := make([]byte, 1024)
-	for {
-		n, err := (*c).Read(b)
-		if n > 0 {		
-			for {
-				// dodgy hack to wait for serial port handshake to complete
-				if !capturingHandshake {
-					break
-				}
-				time.Sleep(50 * time.Millisecond)
-			}
-			if handshakeComplete {
-				s.serialPort.Write(b)
-			} else {
-				buf = append(buf, b[:n]...)
-				if err := CheckAndSendClientHandshake(buf, c); err == nil {
-					//fmt.Printf("client handshake complete\n")
-					handshakeComplete = true
-				}				
-			}
-		}
-		if err != nil {
-			break
-		}
-	}
+  b := make([]byte, 1024)
+  for {
+    n, err := (*c).Read(b)
+    if n > 0 {		
+      for {
+        // dodgy hack to wait for serial port handshake to complete
+        if !capturingHandshake {
+          break
+        }
+        time.Sleep(50 * time.Millisecond)
+      }
+      if handshakeComplete {
+        s.serialPort.Write(b)
+      } else {
+        buf = append(buf, b[:n]...)
+        if err := CheckAndSendClientHandshake(buf, c); err == nil {
+          //fmt.Printf("client handshake complete\n")
+          handshakeComplete = true
+        }				
+      }
+    }
+    if err != nil {
+      break
+    }
+  }
 
-	fmt.Printf("Proxy ended for %s\n", (*c).RemoteAddr())
-	for idx, iterConn := range connections {
-		if c == iterConn {
-			fmt.Printf("Connection removed @ %d\n", idx)
-			connections = append(connections[:idx], connections[idx+1:]...)
-			break
-		}
-	}
-	
-	(*c).Close()
+  fmt.Printf("Proxy ended for %s\n", (*c).RemoteAddr())
+  for idx, iterConn := range connections {
+    if c == iterConn {
+      fmt.Printf("Connection removed @ %d\n", idx)
+      connections = append(connections[:idx], connections[idx+1:]...)
+      break
+    }
+  }
+  
+  (*c).Close()
 }
 
 func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
-	pos := bytes.Index(buf, []byte{start1, start2})
-	if pos == -1 || len(buf) < pos + 2 {
-		return errors.New("not found")
-	}
+  pos := bytes.Index(buf, []byte{start1, start2})
+  if pos == -1 || len(buf) < pos + 2 {
+    return errors.New("not found")
+  }
 
-	pktSize := int((buf[pos+2] << 8) + buf[pos+3])
-	if len(buf) < pos + 4 + pktSize {
-		return errors.New("not found")
-	}
+  pktSize := int((buf[pos+2] << 8) + buf[pos+3])
+  if len(buf) < pos + 4 + pktSize {
+    return errors.New("not found")
+  }
 
-	toRadio := pb.ToRadio{}
-	if err := proto.Unmarshal(buf[pos+4:pos+4+pktSize], &toRadio); err != nil {
-		return errors.New("decode handshake failed")
-	}
-	if fmt.Sprintf("%T", toRadio.GetPayloadVariant()) != "*gomeshproto.ToRadio_WantConfigId" {
-		return errors.New("not WantConfigId")
-	}
-	wantConfigId := toRadio.GetWantConfigId()
-	
-	//s.serialPort.Write(buf[pos:pos+6])
-	for _, msgBytes := range handshakeMessages {
-		//fmt.Printf("sending %+v\n", msgBytes)
-		(*c).Write(msgBytes)
-	}
+  toRadio := pb.ToRadio{}
+  if err := proto.Unmarshal(buf[pos+4:pos+4+pktSize], &toRadio); err != nil {
+    return errors.New("decode handshake failed")
+  }
+  if fmt.Sprintf("%T", toRadio.GetPayloadVariant()) != "*gomeshproto.ToRadio_WantConfigId" {
+    return errors.New("not WantConfigId")
+  }
+  wantConfigId := toRadio.GetWantConfigId()
+  
+  //s.serialPort.Write(buf[pos:pos+6])
+  for _, msgBytes := range handshakeMessages {
+    //fmt.Printf("sending %+v\n", msgBytes)
+    (*c).Write(msgBytes)
+  }
 
-	// SEND THE NODES
-	if !deviceNodesFlag {
-		IterateNodesFromDb(func(n []byte) {
-			packageLength := len(string(n))
-			header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
-			radioPacket := append(header, n...)
-			(*c).Write(radioPacket)		
-		})
-	}
+  // SEND THE NODES
+  if !deviceNodesFlag {
+    IterateNodesFromDb(func(n []byte) {
+      packageLength := len(string(n))
+      header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
+      radioPacket := append(header, n...)
+      (*c).Write(radioPacket)		
+    })
+  }
 
-	ccid := pb.FromRadio{PayloadVariant: &pb.FromRadio_ConfigCompleteId{ConfigCompleteId: wantConfigId}}
-	out, err := proto.Marshal(&ccid)
-	if err != nil {
-		return err
-	}
+  ccid := pb.FromRadio{PayloadVariant: &pb.FromRadio_ConfigCompleteId{ConfigCompleteId: wantConfigId}}
+  out, err := proto.Marshal(&ccid)
+  if err != nil {
+    return err
+  }
 
-	packageLength := len(string(out))
-	header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
-	radioPacket := append(header, out...)
+  packageLength := len(string(out))
+  header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
+  radioPacket := append(header, out...)
 
-	//fmt.Printf("sending final %+v\n", radioPacket)
-	(*c).Write(radioPacket)
+  //fmt.Printf("sending final %+v\n", radioPacket)
+  (*c).Write(radioPacket)
 
-	// now send some historical messages
-	IterateMessagesFromDb(func(pkt []byte){
-		//fmt.Printf("sending old pkt %+v\n", pkt)
-		(*c).Write(pkt)
-	})
+  // now send some historical messages
+  IterateMessagesFromDb(func(pkt []byte){
+    //fmt.Printf("sending old pkt %+v\n", pkt)
+    (*c).Write(pkt)
+  })
 
-	return nil
+  return nil
 }

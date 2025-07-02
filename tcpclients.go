@@ -92,12 +92,14 @@ func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
 	}
 
 	// SEND THE NODES
-	IterateNodesFromDb(func(n []byte) {
-		packageLength := len(string(n))
-		header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
-		radioPacket := append(header, n...)
-		(*c).Write(radioPacket)		
-	})
+	if !deviceNodesFlag {
+		IterateNodesFromDb(func(n []byte) {
+			packageLength := len(string(n))
+			header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
+			radioPacket := append(header, n...)
+			(*c).Write(radioPacket)		
+		})
+	}
 
 	ccid := pb.FromRadio{PayloadVariant: &pb.FromRadio_ConfigCompleteId{ConfigCompleteId: wantConfigId}}
 	out, err := proto.Marshal(&ccid)
@@ -111,6 +113,12 @@ func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
 
 	//fmt.Printf("sending final %+v\n", radioPacket)
 	(*c).Write(radioPacket)
+
+	// now send some historical messages
+	IterateMessagesFromDb(func(pkt []byte){
+		//fmt.Printf("sending old pkt %+v\n", pkt)
+		(*c).Write(pkt)
+	})
 
 	return nil
 }

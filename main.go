@@ -15,13 +15,17 @@ var dbDumpFlag string
 var noLogFlag bool
 var showPacketsFlag bool
 var indexFlag bool
+var removeNodeFlag string
+var deviceNodesFlag bool
 
 func main() {
 
 	flag.StringVar(&portFlag, "port", "/dev/ttyACM0", "serial port address")
-	flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex)")
+	flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex,messages)")
+	flag.StringVar(&removeNodeFlag, "removenode", "", "remove node from db given 8 character hex string")
 	flag.BoolVar(&noLogFlag, "nolog", false, "dont disply log output")
 	flag.BoolVar(&showPacketsFlag, "showpackets", false, "show packets on output")
+	flag.BoolVar(&deviceNodesFlag, "devicenodes", false, "use device nodes instead of local db")
 	//flag.BoolVar(&indexFlag, "index", false, "index nodes")
   flag.Parse()  // after declaring flags we need to call it
 
@@ -36,6 +40,11 @@ func main() {
 
 	if indexFlag {
 		IndexDb()
+		os.Exit(0)
+	}
+
+	if len(removeNodeFlag) > 0 {
+		RemoveNodeFromDb(removeNodeFlag)
 		os.Exit(0)
 	}
 	

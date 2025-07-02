@@ -32,6 +32,11 @@ func InitDb() {
 			fmt.Printf("create bucket error: %s", err)
 			os.Exit(1)
 		}
+		_, err = tx.CreateBucketIfNotExists([]byte("messages"))
+		if err != nil {
+			fmt.Printf("create bucket error: %s", err)
+			os.Exit(1)
+		}
 		return nil
 	})
 }
@@ -45,7 +50,26 @@ func DumpDb(dumpFlag string) {
 		DumpNodes()
 	} else if dumpFlag == "nodeindex" {
 		DumpNodeIndex()
+	} else if dumpFlag == "messages" {
+		DumpMessages()
 	}
+}
+
+func DumpMessages() {
+	db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("messages"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			pkt := pb.FromRadio{}
+			if err := proto.Unmarshal(v, &pkt); err != nil {
+				fmt.Printf("Error unmarshalling: %+v\n", err)
+			} else {
+				timestamp := binary.LittleEndian.Uint32(k)
+				fmt.Printf("%d -> %s\n\n", timestamp, pkt.String())
+			}
+		}
+		return nil
+	})
 }
 
 func DumpNodes() {
@@ -173,6 +197,51 @@ func SaveNodeToDb(nodeInfo *pb.NodeInfo) error {
 		nodeNumBytes := make([]byte, 4)
 		binary.LittleEndian.PutUint32(nodeNumBytes, nodeInfo.Num)
 		bni.Put(nodeNumBytes, []byte(nodeInfo.User.Id))
+		return nil
+	})
+}
+
+func RemoveNodeFromDb(nodeId string) {
+	fmt.Printf("Removing node %s\n", nodeId)
+	db.Update(func(tx *bolt.Tx) error {
+		// update the node
+		b := tx.Bucket([]byte("nodes"))
+		b.Delete([]byte("!" + nodeId))
+
+		return nil
+	})
+}
+
+func AppendMessagePktToDb(timestamp uint32, pktData []byte) {
+	db.Update(func(tx *bolt.Tx) error {
+
+		// update the node
+		b := tx.Bucket([]byte("messages"))
+		timestampBytes := make([]byte, 4)
+		binary.LittleEndian.PutUint32(timestampBytes, timestamp)
+		b.Put(timestampBytes, pktData)
+
+		return nil
+	})
+}
+
+func IterateMessagesFromDb(cb func(n []byte)) {
+	db.View(func(tx *bolt.Tx) error {
+
+		b := tx.Bucket([]byte("messages"))
+		c := b.Cursor()
+		for k, v := c.First(); k != nil; k, v = c.Next() {
+			cb(v)
+		}
+
+		return nil
+	})
+	db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte("messages"))
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			b.Delete(k)
+		}
 		return nil
 	})
 }

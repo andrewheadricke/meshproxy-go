@@ -141,9 +141,17 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 		nodeInfo.Num = pkt.From
 		nodeInfo.LastHeard = pkt.RxTime
 		hops := pkt.HopStart - pkt.HopLimit
+		//hops := uint32(0)
 		nodeInfo.HopsAway = &hops
-		
-		if decodedPkt.GetPortnum() == pb.PortNum_NODEINFO_APP {
+
+		if decodedPkt.GetPortnum() == pb.PortNum_TEXT_MESSAGE_APP {
+
+			if len(connections) == 0 {
+				fmt.Printf("Saving TEXT_MESSAGE: %s\n", string(decodedPkt.GetPayload()))
+				AppendMessagePktToDb(pkt.RxTime, rawBytes)
+			}
+
+		} else if decodedPkt.GetPortnum() == pb.PortNum_NODEINFO_APP {
 			userInfo := pb.User{}
 			if err := proto.Unmarshal(decodedPkt.GetPayload(), &userInfo); err != nil {
 				fmt.Printf("Error unmarshalling: %+v\n", err)
@@ -200,21 +208,17 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
 	} else {
 		if capturingHandshake {
 			if fmt.Sprintf("%T", fromRadio.GetPayloadVariant()) == "*gomeshproto.FromRadio_NodeInfo" {
-				if !capturingHandshake {
-					fmt.Printf("Got FromRadio_NodeInfo\n")
-					return
+				if !firstNodeInfoReceived {
+					nodeInfo := fromRadio.GetNodeInfo()
+					connectedNodeId = nodeInfo.User.Id
+					SaveNodeToDb(nodeInfo)
+					// dont return, so we append the firstNode to handshake list
+					firstNodeInfoReceived = true
 				} else {
-					if !firstNodeInfoReceived {
-
-						nodeInfo := fromRadio.GetNodeInfo()
-						connectedNodeId = nodeInfo.User.Id
-						SaveNodeToDb(nodeInfo)
-						// dont return, so we append the firstNode to handshake list
-						firstNodeInfoReceived = true
-					} else {
+					if !deviceNodesFlag {
 						return
 					}
-				}				
+				}
 			}
 			handshakeMessages = append(handshakeMessages, rawBytes)
 		}

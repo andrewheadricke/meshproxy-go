@@ -21,6 +21,8 @@ Because I have an externally mounted RAK Wisblock device paired with a Raspberry
 * In the event your meshtastic device gets corrupted or resets you have a backup of your node list
 
 ### Notes
+Currently only supports Linux due to use of TCP_INFO for detecting broken connections, making it work in Windows or MacOS wouldn't take long.
+
 There is no security or authorization, it's a straight through proxy. Anyone that can connect to the TCP port will receive all settings on the meshtastic device. Things like Private/Public keys for the node and channels, Wifi settings incl password, MQTT username and password etc.
 
 On some devices like RAK, establishing a serial connection appears to disable the bluetooth. So if you use this tool you may not be able to connect via bluetooth. Power cycle the node to allow bluetooth again.

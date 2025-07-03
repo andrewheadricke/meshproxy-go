@@ -7,6 +7,7 @@ import (
   "log"
   "flag"
   "syscall"
+  //"context"
   "os/signal"	
 )
 
@@ -49,12 +50,13 @@ func main() {
   }
   
   s.Init(portFlag)
-
+  
   l, err := net.Listen("tcp", ":4403")
   if err != nil {
     log.Fatal(err)
-  }
+  }	
   defer l.Close()
+
   if s.serialPort == nil {
     fmt.Printf("Serial port failure\n")
     os.Exit(1)

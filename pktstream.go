@@ -95,9 +95,7 @@ func handleFromRadioStream(s *streamer) {
           //(*mqClient).Publish("msh/ANZ/3/e", 0, false, data)
 
           // send the packet to all TCP connections
-          for _, c := range connections {
-            (*c).Write(data)
-          }
+          BroadcastMessageToConnections(data)
           HandlePackets(&fromRadio, data)
         }
     }

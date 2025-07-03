@@ -15,10 +15,10 @@ import (
 
 )
 
-var connections []*net.Conn
+var connections []net.Conn
 
-func HandleTcpConnection(s *streamer, c *net.Conn) {
-  fmt.Printf("Got connection from %s\n", (*c).RemoteAddr())
+func HandleTcpConnection(s *streamer, c net.Conn) {
+  fmt.Printf("Got connection from %s\n", c.RemoteAddr())
   connections = append(connections, c)
     
   handshakeComplete := false
@@ -33,15 +33,20 @@ func HandleTcpConnection(s *streamer, c *net.Conn) {
 
   b := make([]byte, 1024)
   for {
-    n, err := (*c).Read(b)
-    if n > 0 {
-      for {
-        // dodgy hack to wait for serial port handshake to complete
-        if !capturingHandshake {
-          break
-        }
-        time.Sleep(50 * time.Millisecond)
+
+    for {
+      // dodgy hack to wait for serial port handshake to complete
+      if !capturingHandshake {
+        break
       }
+      if shuttingDown {
+        break
+      }
+      time.Sleep(50 * time.Millisecond)
+    }
+
+    n, err := c.Read(b)
+    if n > 0 {      
       if handshakeComplete {
         s.serialPort.Write(b)
       } else {
@@ -49,19 +54,19 @@ func HandleTcpConnection(s *streamer, c *net.Conn) {
         if err := CheckAndSendClientHandshake(buf, c); err == nil {
           //fmt.Printf("client handshake complete\n")
           handshakeComplete = true
-        }				
+        }	
       }
     }
     if err != nil {
       if strings.HasSuffix(err.Error(), "use of closed network connection") || err.Error() == "EOF" {
       } else {
         fmt.Printf("unexpected read error: %+v\n", err)
-      }			
+      }
       break
     }
   }
 
-  fmt.Printf("Proxy ended for %s\n", (*c).RemoteAddr())
+  fmt.Printf("Proxy ended for %s\n", c.RemoteAddr())
   for idx, iterConn := range connections {
     if c == iterConn {
       fmt.Printf("Connection removed @ %d\n", idx)
@@ -70,10 +75,10 @@ func HandleTcpConnection(s *streamer, c *net.Conn) {
     }
   }
   
-  (*c).Close()
+  c.Close()
 }
 
-func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
+func CheckAndSendClientHandshake(buf []byte, c net.Conn) error {
   pos := bytes.Index(buf, []byte{start1, start2})
   if pos == -1 || len(buf) < pos + 2 {
     return errors.New("not found")
@@ -96,7 +101,7 @@ func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
   //s.serialPort.Write(buf[pos:pos+6])
   for _, msgBytes := range handshakeMessages {
     //fmt.Printf("sending %+v\n", msgBytes)
-    (*c).Write(msgBytes)
+    c.Write(msgBytes)
   }
 
   // SEND THE NODES
@@ -105,7 +110,7 @@ func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
       packageLength := len(string(n))
       header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
       radioPacket := append(header, n...)
-      (*c).Write(radioPacket)		
+      c.Write(radioPacket)		
     })
   }
 
@@ -120,33 +125,43 @@ func CheckAndSendClientHandshake(buf []byte, c *net.Conn) error {
   radioPacket := append(header, out...)
 
   //fmt.Printf("sending final %+v\n", radioPacket)
-  (*c).Write(radioPacket)
+  c.Write(radioPacket)
 
   // now send some historical messages
   IterateMessagesFromDb(func(pkt []byte){
     //fmt.Printf("sending old pkt %+v\n", pkt)
-    (*c).Write(pkt)
+    c.Write(pkt)
   })
 
   return nil
 }
 
 func BroadcastMessageToConnections(messageData []byte) {
+
+  //fmt.Printf("broadcasting message\n")
   for _, c := range connections {
-    //(*c).SetDeadline(time.Now().Add(1 * time.Second))
-    _, err := (*c).Write(messageData)
-    if err != nil {
-      fmt.Printf("Closed connection %s\n", (*c).RemoteAddr())
+
+    if shuttingDown {
+      return
     }
 
-    tcpConn := (*c).(*net.TCPConn)
+    //(*c).SetDeadline(time.Now().Add(1 * time.Second))
+    _, err := c.Write(messageData)
+    if err != nil {
+      fmt.Printf("Closed connection %s\n", c.RemoteAddr())
+      c.Close()
+      continue
+    }
+
+    tcpConn := c.(*net.TCPConn)
     tcpInfo, err := tcpinfo.GetsockoptTCPInfo(tcpConn)
     if err != nil {
-        panic(err)
+      fmt.Printf("looks like connection is closed\n")
+      continue
     }
     if tcpInfo.Retransmits > 5 {
-      fmt.Printf("Closing broken connection @ %s\n", (*c).RemoteAddr())
-      (*c).Close()
+      fmt.Printf("Closing broken connection @ %s\n", c.RemoteAddr())
+      c.Close()
     }
   }
 }

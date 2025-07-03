@@ -95,7 +95,9 @@ func handleFromRadioStream(s *streamer) {
           //(*mqClient).Publish("msh/ANZ/3/e", 0, false, data)
 
           // send the packet to all TCP connections
-          BroadcastMessageToConnections(data)
+          if !capturingHandshake {
+            BroadcastMessageToConnections(data)
+          }
           HandlePackets(&fromRadio, data)
         }
     }
@@ -179,6 +181,12 @@ func HandlePackets(fromRadio *pb.FromRadio, rawBytes []byte) {
       nodeInfo.Position = &posInfo
 
       fmt.Printf("Position updated for %s\n", nodeInfo.User.LongName)
+    } else if decodedPkt.GetPortnum() == pb.PortNum_UNKNOWN_APP {
+      
+    } else if decodedPkt.GetPortnum() == pb.PortNum_ROUTING_APP || decodedPkt.GetPortnum() == pb.PortNum_TELEMETRY_APP {
+      
+    } else {
+      fmt.Printf("Got portnum %d\n", decodedPkt.GetPortnum())
     }
 
     // write to db

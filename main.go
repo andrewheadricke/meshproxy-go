@@ -7,7 +7,6 @@ import (
   "log"
   "flag"
   "syscall"
-  //"context"
   "os/signal"	
 )
 
@@ -18,6 +17,8 @@ var showPacketsFlag bool
 var indexFlag bool
 var removeNodeFlag string
 var deviceNodesFlag bool
+
+var shuttingDown = false
 
 func main() {
 
@@ -31,7 +32,13 @@ func main() {
   flag.Parse()  // after declaring flags we need to call it
 
   s := &streamer{}
-  ListenForShutdown(s)
+  l, err := net.Listen("tcp", ":4403")
+  if err != nil {
+    log.Fatal(err)
+  }	
+  defer l.Close()
+
+  shutdownDone := ListenForShutdown(s, l)
   InitDb()
 
   if len(dbDumpFlag) > 0 {
@@ -51,11 +58,6 @@ func main() {
   
   s.Init(portFlag)
   
-  l, err := net.Listen("tcp", ":4403")
-  if err != nil {
-    log.Fatal(err)
-  }	
-  defer l.Close()
 
   if s.serialPort == nil {
     fmt.Printf("Serial port failure\n")
@@ -71,29 +73,39 @@ func main() {
   for {
     var err error
     activeConn, err := l.Accept()
+    if shuttingDown {
+      break
+    }
     if err != nil {
       log.Fatal(err)
-    }
-    go HandleTcpConnection(s, &activeConn)
+    }		
+    go HandleTcpConnection(s, activeConn)
   }	
+
+  <- shutdownDone
 }
 
-func ListenForShutdown(s *streamer) {
+func ListenForShutdown(s *streamer, l net.Listener) chan bool {
+  d := make(chan bool)
   c := make(chan os.Signal)
   signal.Notify(c, os.Interrupt, syscall.SIGTERM)
   go func() {
     <-c
     fmt.Printf("\nExiting...\n")
+    shuttingDown = true
+    l.Close()
     fmt.Printf("Closing TCP Connections\n")
     for _, c := range connections {
-      (*c).Close()
+      c.Close()
     }
 
+    //time.Sleep(10 * time.Second)
     fmt.Printf("Closing Serial connection\n")
     s.Close()
 
     fmt.Printf("Closing Db\n")
     CloseDb()
-    os.Exit(0)
+    d <- true
   }()
+  return d
 }

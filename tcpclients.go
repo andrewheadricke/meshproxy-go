@@ -53,7 +53,7 @@ func HandleTcpConnection(s *streamer, c *net.Conn) {
       }
     }
     if err != nil {
-      if strings.HasSuffix(err.Error(), "use of closed network connection") {
+      if strings.HasSuffix(err.Error(), "use of closed network connection") || err.Error() == "EOF" {
       } else {
         fmt.Printf("unexpected read error: %+v\n", err)
       }			

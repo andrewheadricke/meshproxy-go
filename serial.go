@@ -101,7 +101,6 @@ func (s *streamer) Read(p []byte) (int, error) {
   return size, nil
 }
 
-/*
 func (s *streamer) Write(p []byte) error {
 
   _, err := s.serialPort.Write(p)
@@ -114,6 +113,7 @@ func (s *streamer) Write(p []byte) error {
   return nil
 }
 
+/*
 func IsPortClosedError(err error) bool {
   sErr, _ := err.(serial.PortError)
   fmt.Printf("%+v\n", sErr)

@@ -7,9 +7,8 @@ import (
   "bytes"
   "errors"
   "strings"
-  //"crypto/rand"
 
-  "github.com/brucespang/go-tcpinfo"
+	"github.com/jursonmo/go-tcpinfo"
   "google.golang.org/protobuf/proto"
   pb "example.com/meshproxy-go/gomeshproto"
 
@@ -44,25 +43,28 @@ func HandleTcpConnection(s *streamer, c net.Conn) {
       }
       time.Sleep(50 * time.Millisecond)
     }
-
+		
     n, err := c.Read(b)
-    if n > 0 {      
-      if handshakeComplete {
-        s.serialPort.Write(b)
-      } else {
-        buf = append(buf, b[:n]...)
-        if err := CheckAndSendClientHandshake(buf, c); err == nil {
-          //fmt.Printf("client handshake complete\n")
-          handshakeComplete = true
-        }	
-      }
-    }
-    if err != nil {
+		if err != nil {
       if strings.HasSuffix(err.Error(), "use of closed network connection") || err.Error() == "EOF" {
       } else {
         fmt.Printf("unexpected read error: %+v\n", err)
       }
       break
+    }
+    if n > 0 {      
+			tmpBuf := make([]byte, n)
+			copy(tmpBuf, b[:n])
+
+      if handshakeComplete {
+				s.Write(tmpBuf)
+      } else {
+        buf = append(buf, tmpBuf...)
+        if err := CheckAndSendClientHandshake(buf, c); err == nil {
+          //fmt.Printf("client handshake complete\n")
+          handshakeComplete = true
+        }	
+      }
     }
   }
 
@@ -154,11 +156,10 @@ func BroadcastMessageToConnections(messageData []byte) {
     }
 
     tcpConn := c.(*net.TCPConn)
-    tcpInfo, err := tcpinfo.GetsockoptTCPInfo(tcpConn)
-    if err != nil {
-      fmt.Printf("looks like connection is closed\n")
-      continue
-    }
+		tcpInfo, err := tcpinfo.GetTCPInfo(tcpConn)
+		if err != nil {
+				panic(err)
+		}
     if tcpInfo.Retransmits > 5 {
       fmt.Printf("Closing broken connection @ %s\n", c.RemoteAddr())
       c.Close()

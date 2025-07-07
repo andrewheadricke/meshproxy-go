@@ -1,12 +1,14 @@
 # meshproxy-go
 
-A cli tool to connect to serial meshtastic nodes and provide a TCP server for other clients to connect to. It defaults to listen on port 4403 just like on the hardware devices with Wifi.
+A cli tool to connect to serial meshtastic nodes and provide raw TCP server and Websockets for other clients to connect to. It defaults to listen on port 4403 just like on the hardware devices with Wifi. 
 
 ### Why?
 Because I have an externally mounted RAK Wisblock device paired with a Raspberry pi zero, the RAK only has Serial and Bluetooth and I wanted to share its packet stream with other devices on the network using the Raspberry pi zero's Wifi.
 
 #### Features
 * Allows multiple clients to connect via TCP simultanously to the single node. All packets received on the node will be forwarded to all TCP connections. All TCP clients can send packets to the node.
+
+* *NEW* - Allows websocket connections. All messages contain the base64 protobuf as well as a decoded JSON object. This allows very simple HTML websites to connect to a node and process the data without needing the javascript protobufs.
 
 * Auto switch serial ports. The serial connection appears unstable and disconnects at random times (could be my USB plug), and occasionaly would change from ttyUSB0 to ttyUSB1. This tool will auto switch between 0 & 1.
 
@@ -26,3 +28,5 @@ Currently only supports Linux due to use of TCP_INFO for detecting broken connec
 There is no security or authorization, it's a straight through proxy. Anyone that can connect to the TCP port will receive all settings on the meshtastic device. Things like Private/Public keys for the node and channels, Wifi settings incl password, MQTT username and password etc.
 
 On some devices like RAK, establishing a serial connection appears to disable the bluetooth. So if you use this tool you may not be able to connect via bluetooth. Power cycle the node to allow bluetooth again.
+
+Websocket support is not fully complete. It will send all packets to the websocket, but only WantConfigId is currently supported going to the radio.

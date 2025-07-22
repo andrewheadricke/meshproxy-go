@@ -230,7 +230,9 @@ func BroadcastMessageToConnections(messageData []byte) {
     tcpConn := c.rawConn.(*net.TCPConn)
 		tcpInfo, err := tcpinfo.GetTCPInfo(tcpConn)
 		if err != nil {
-				panic(err)
+			fmt.Printf("GetTCPInfo error: %+v\n", err)
+			c.Close()
+			continue
 		}
     if tcpInfo.Retransmits > 5 {
       fmt.Printf("Closing broken connection @ %s\n", c.rawConn.RemoteAddr())

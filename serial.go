@@ -58,7 +58,7 @@ func FindSerialDevice() string {
   }
   var fullPath string
   for _, entry := range entries {
-    if strings.Index(entry.Name(), "CP2104") >= 0 || strings.Index(entry.Name(), "RAKwireless") >= 0 {
+    if strings.Index(entry.Name(), "CP2104") >= 0 || strings.Index(entry.Name(), "RAKwireless") >= 0 || strings.Index(entry.Name(), "Seeed_Studio") >= 0 {
       fullPath, err = filepath.EvalSymlinks("/dev/serial/by-id/" + entry.Name())
       if err != nil {
         panic(err)

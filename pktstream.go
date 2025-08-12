@@ -77,7 +77,7 @@ func handleFromRadioStream(s *streamer) {
           if strings.HasSuffix(cleanString, "Lost phone connection") || strings.HasSuffix(cleanString, "Start meshradio init") {
             sendWantConfigId(&s.serialPort)
           }
-          if !noLogFlag {
+          if logFlag {
             fmt.Printf("%s", logString)
           }
         }

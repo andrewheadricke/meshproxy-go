@@ -12,7 +12,7 @@ import (
 
 var portFlag string
 var dbDumpFlag string
-var noLogFlag bool
+var logFlag bool
 var showPacketsFlag bool
 var indexFlag bool
 var removeNodeFlag string
@@ -25,7 +25,7 @@ func main() {
   flag.StringVar(&portFlag, "port", "", "serial port address")
   flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex,messages)")
   flag.StringVar(&removeNodeFlag, "removenode", "", "remove node from db given 8 character hex string")
-  flag.BoolVar(&noLogFlag, "nolog", false, "dont disply log output")
+  flag.BoolVar(&logFlag, "log", false, "show device log output")
   flag.BoolVar(&showPacketsFlag, "showpackets", false, "show packets on output")
   flag.BoolVar(&deviceNodesFlag, "devicenodes", false, "use device nodes instead of local db")
   //flag.BoolVar(&indexFlag, "index", false, "index nodes")

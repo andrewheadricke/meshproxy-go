@@ -5,8 +5,11 @@ import (
   "os"
   "io"
   "fmt"
+  "log"
   "time"
   "bytes"
+  "strings"
+  "path/filepath"
 
   "go.bug.st/serial"
 )
@@ -23,7 +26,11 @@ type streamer struct {
 
 func (s *streamer) Init(addr string) error {
 
-  s.address = addr
+  if addr == "" {
+    s.address = FindSerialDevice()
+  } else {
+    s.address = addr
+  }
 
   mode := &serial.Mode{
     BaudRate: 115200,
@@ -32,7 +39,7 @@ func (s *streamer) Init(addr string) error {
     StopBits: serial.OneStopBit,
   }
 
-  port, err := serial.Open(addr, mode)
+  port, err := serial.Open(s.address, mode)
   if err != nil {
     fmt.Printf("%+v\n", err)
     return err
@@ -44,24 +51,32 @@ func (s *streamer) Init(addr string) error {
   return nil
 }
 
-func (s *streamer) Reconnect() error {
-  if s.address == "/dev/ttyUSB0" {
-    s.address = "/dev/ttyUSB1" 
-  } else if s.address == "/dev/ttyUSB1" {
-    s.address = "/dev/ttyUSB2"
-  } else if s.address == "/dev/ttyUSB2" {
-    s.address = "/dev/ttyUSB3"
-  } else if s.address == "/dev/ttyUSB3" {
-    s.address = "/dev/ttyUSB0"
-  } else if s.address == "/dev/ttyACM0" {
-    s.address = "/dev/ttyACM1" 
-  } else if s.address == "/dev/ttyACM1" {
-    s.address = "/dev/ttyACM2"
-  } else if s.address == "/dev/ttyACM2" {
-    s.address = "/dev/ttyACM3"
-  } else if s.address == "/dev/ttyACM3" {
-    s.address = "/dev/ttyACM0"
+func FindSerialDevice() string {
+  entries, err := os.ReadDir("/dev/serial/by-id")
+  if err != nil {
+    log.Fatal(err)
   }
+  var fullPath string
+  for _, entry := range entries {
+    if strings.Index(entry.Name(), "CP2104") >= 0 || strings.Index(entry.Name(), "RAKwireless") >= 0 {
+      fullPath, err = filepath.EvalSymlinks("/dev/serial/by-id/" + entry.Name())
+      if err != nil {
+        panic(err)
+      }
+      break
+    }
+  }
+  fmt.Printf("Detected serial device at %s\n", fullPath)
+
+  return fullPath
+}
+
+func (s *streamer) Reconnect() error {
+
+  // find device
+  time.Sleep(1 * time.Second)
+  
+  s.address = FindSerialDevice()
 
   mode := &serial.Mode{
     BaudRate: 115200,

@@ -3,14 +3,18 @@ package main
 import (
 	"fmt"
 	"log"	
+	"time"
 	"bytes"
 	"bufio"
+	"errors"
 	"net/http"
+	"math/rand"
 	"encoding/json"
+	"encoding/base64"
 
 	"github.com/gorilla/websocket"
-	//"google.golang.org/protobuf/proto"
-  //pb "example.com/meshproxy-go/gomeshproto"
+	"google.golang.org/protobuf/proto"
+  pb "example.com/meshproxy-go/gomeshproto"
 )
 
 var chanWebsocketComplete chan bool
@@ -22,6 +26,8 @@ var upgrader = websocket.Upgrader{
 		return true
  },
 }
+
+const broadcastNum = 0xffffffff
 
 func CheckForWebsocketUpgrade(buf []byte, clientConn *ClientConnection, s *streamer) chan bool {
 	//fmt.Printf("%+v %+v\n", buf, string(buf))
@@ -93,5 +99,112 @@ func EncodeProtobufAndSend(msg []byte, s *streamer, clientConn *ClientConnection
 		wantConfigId := uint32(wantConfigMap["ConfigId"].(float64))
 		
 		SendHandshakeMessages(clientConn, wantConfigId)
+	} else if sendPacketIface, bFound := msgJson.Json["SendPacket"]; bFound {		
+		sendPacketMap, ok := sendPacketIface.(map[string]interface{})
+		if !ok {
+			clientConn.WriteWsResponse("invalid packet type")
+			return
+		}
+		var payload []byte
+		var portnum float64
+		var to float64
+		var channel float64
+
+		payloadB64, ok := sendPacketMap["payload_b64"].(string)
+		if !ok {
+			clientConn.WriteWsResponse("invalid payload type")
+			return
+		}
+		payload, err = base64.StdEncoding.DecodeString(payloadB64)
+		if err != nil {
+			clientConn.WriteWsResponse("invalid payload base64")
+			return
+		}
+
+		portnum, ok = sendPacketMap["portnum"].(float64)
+		if !ok {
+			clientConn.WriteWsResponse("invalid portnum type")
+			return
+		}
+
+		to, ok = sendPacketMap["to"].(float64)
+		if !ok {
+			clientConn.WriteWsResponse("invalid to type")
+			return
+		}
+
+		channel, ok = sendPacketMap["channel"].(float64)
+		if !ok {
+			clientConn.WriteWsResponse("invalid channel type")
+			return
+		}
+
+		err := SendPacket(payload, pb.PortNum(portnum), int64(to), int64(channel), s)
+		if err != nil {
+			fmt.Printf("%+v\n", err)
+		}
 	}
+}
+
+func SendPacket(payload []byte, portnum pb.PortNum, to int64, channel int64, s *streamer) error {
+	var address int64
+	if to == 0 {
+		address = broadcastNum
+	} else {
+		address = to
+	}
+
+	// This constant is defined in Constants_DATA_PAYLOAD_LEN, but not in a friendly way to use
+	if len(payload) > 240 {
+		return errors.New("message too large")
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	packetID := rand.Intn(2386828-1) + 1
+
+	radioMessage := pb.ToRadio{
+		PayloadVariant: &pb.ToRadio_Packet{
+			Packet: &pb.MeshPacket{
+				To:      uint32(address),
+				WantAck: true,
+				Id:      uint32(packetID),
+				Channel: uint32(channel),
+				PayloadVariant: &pb.MeshPacket_Decoded{
+					Decoded: &pb.Data{
+						Payload: payload,
+						Portnum: portnum,
+						//Portnum: 257,
+					},
+				},
+			},
+		},
+	}
+
+	out, err := proto.Marshal(&radioMessage)
+	if err != nil {
+		return err
+	}
+
+	if err := sendPacket(out, s); err != nil {
+		return err
+	}
+
+	return nil
+
+}
+
+func sendPacket(protobufPacket []byte, s *streamer) (err error) {
+
+	packageLength := len(string(protobufPacket))
+
+	header := []byte{start1, start2, byte(packageLength>>8) & 0xff, byte(packageLength) & 0xff}
+
+	radioPacket := append(header, protobufPacket...)
+	err = s.Write(radioPacket)
+	if err != nil {
+		return err
+	}
+
+	return
+
 }

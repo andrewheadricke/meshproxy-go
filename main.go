@@ -22,7 +22,7 @@ var shuttingDown = false
 
 func main() {
 
-  flag.StringVar(&portFlag, "port", "/dev/ttyACM0", "serial port address")
+  flag.StringVar(&portFlag, "port", "", "serial port address")
   flag.StringVar(&dbDumpFlag, "dump", "", "write db contents to stdout (nodes,nodeindex,messages)")
   flag.StringVar(&removeNodeFlag, "removenode", "", "remove node from db given 8 character hex string")
   flag.BoolVar(&noLogFlag, "nolog", false, "dont disply log output")
@@ -57,7 +57,6 @@ func main() {
   }
   
   s.Init(portFlag)
-  
 
   if s.serialPort == nil {
     fmt.Printf("Serial port failure\n")

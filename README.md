@@ -8,7 +8,9 @@ Because I have an externally mounted RAK Wisblock device paired with a Raspberry
 #### Features
 * Allows multiple clients to connect via TCP simultanously to the single node. All packets received on the node will be forwarded to all TCP connections. All TCP clients can send packets to the node.
 
-* *NEW* - Allows websocket connections. All messages contain the base64 protobuf as well as a decoded JSON object. This allows very simple HTML websites to connect to a node and process the data without needing the javascript protobufs.
+* Allows websocket connections. All messages contain the base64 protobuf as well as a decoded JSON object. This allows very simple HTML websites to connect to a node and process the data without needing the javascript protobufs.
+
+* Support for built in WebUI, default being https://github.com/andrewheadricke/meshui
 
 * Auto switch serial ports. The serial connection appears unstable and disconnects at random times (could be my USB plug), and occasionaly would change from ttyUSB0 to ttyUSB1. This tool will auto switch between 0 & 1.
 

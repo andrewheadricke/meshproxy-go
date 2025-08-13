@@ -31,6 +31,8 @@ func main() {
   //flag.BoolVar(&indexFlag, "index", false, "index nodes")
   flag.Parse()  // after declaring flags we need to call it
 
+	InitEmbeddedFs()
+
   s := &streamer{}
   l, err := net.Listen("tcp", ":4403")
   if err != nil {

@@ -21,7 +21,7 @@ import (
 
 // we mainly need this for broadcasting / sending out data from the radio to clients
 type ClientConnection struct {
-  connType int // 1 = tcp, 2 = websocket
+  connType int // 1 = tcp, 2 = websocket, 3 = http request
   rawConn net.Conn
   webSocket *websocket.Conn
   mu sync.Mutex
@@ -84,7 +84,7 @@ func HandleTcpConnection(s *streamer, conn net.Conn) {
     
   handshakeComplete := false
   buf := make([]byte, 0)
-  chanWebsocketComplete := make(chan bool)
+  chanWsComplete := make(chan int)
 
   // wait for WantConfig, keep request Id
   // send cached handshakeMessages (stop after PAX)
@@ -124,13 +124,17 @@ func HandleTcpConnection(s *streamer, conn net.Conn) {
       } else {
         buf = append(buf, tmpBuf...)
 
-        chanWebsocketComplete = CheckForWebsocketUpgrade(buf, &newConn, s)
-        if chanWebsocketComplete != nil {
+				var connType int
+        connType, chanWsComplete = CheckForHttpRequest(buf, &newConn, s)
+        if connType == 2 {
           fmt.Printf("Switching to Websocket\n")
           newConn.connType = 2
           //fmt.Printf("%+v\n", *connections[0])
           break
-        }
+        } else if connType == 3 {
+					//fmt.Printf("Detected HTTP request\n")
+					break
+				}
 
         if err := CheckAndSendClientHandshake(buf, newConn.rawConn); err == nil {
           //fmt.Printf("client handshake complete\n")
@@ -140,9 +144,9 @@ func HandleTcpConnection(s *streamer, conn net.Conn) {
     }
   }
 
-  if chanWebsocketComplete != nil {
+  if chanWsComplete != nil {
     //fmt.Printf("waiting for websocket completion\n")
-    <- chanWebsocketComplete
+    <- chanWsComplete
   }
 
   fmt.Printf("Proxy ended for %s\n", newConn.rawConn.RemoteAddr())

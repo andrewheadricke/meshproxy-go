@@ -11,9 +11,10 @@ import (
 )
 
 type CustomResponseWriter struct {
-	statusCode int
-	header     http.Header
-	conn       net.Conn
+	statusCode  int
+	header      http.Header
+	conn        net.Conn
+	headersSent bool
 }
 
 func NewCustomResponseWriter(conn net.Conn) *CustomResponseWriter {
@@ -29,13 +30,26 @@ func (w *CustomResponseWriter) Header() http.Header {
 }
 
 func (w *CustomResponseWriter) Write(b []byte) (int, error) {
-	//fmt.Printf("write\n")
-	return 0, nil
+	//fmt.Printf("Write->headers %+v\n", w.header)
+	if !w.headersSent {
+		for key, value := range w.header {
+			w.conn.Write([]byte(key + ": " + value[0] + "\n"))
+		}
+		w.conn.Write([]byte("\n"))
+		w.headersSent = true
+	}
+	
+	w.conn.Write(b)
+	return len(b), nil
 }
 
 func (w *CustomResponseWriter) WriteHeader(statusCode int) {
 	//fmt.Printf("writeheader %+v\n", statusCode)
-	w.statusCode = statusCode
+	if statusCode == 200 {
+		w.conn.Write([]byte("HTTP/1.1 200 OK\n"))
+	} else if statusCode == 404 {
+		w.conn.Write([]byte("HTTP/1.1 404 Not Found\n"))
+	}
 }
 
 func (w *CustomResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {

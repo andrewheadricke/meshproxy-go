@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"bufio"
 	"errors"
+	"regexp"
 	"net/http"
 	"math/rand"
 	"encoding/json"
@@ -29,42 +30,57 @@ var upgrader = websocket.Upgrader{
 
 const broadcastNum = 0xffffffff
 
-func CheckForWebsocketUpgrade(buf []byte, clientConn *ClientConnection, s *streamer) chan bool {
-	//fmt.Printf("%+v %+v\n", buf, string(buf))
+func CheckForHttpRequest(buf []byte, clientConn *ClientConnection, s *streamer) (connType int, wsComplete chan int) {
+	//fmt.Printf("%+v\n%+v\n", buf, string(buf))
 
-	if bytes.Equal(buf[:16], []byte("GET / HTTP/1.1\r\n")) {
-		chanWebsocketComplete := make(chan bool)
+	re := regexp.MustCompile(`GET (/[a-zA-Z0-9_\-\/\.]*) HTTP/1.1`)
+	match := re.FindStringSubmatch(string(buf))
 
-		fmt.Printf("http request detected\n")
+	if len(match) == 2 {
+		//fmt.Printf("http request detected\n")
 
 		req := getHttpRequest(buf)
 		rw := NewCustomResponseWriter(clientConn.rawConn)
 
-		wsConn, err := upgrader.Upgrade(rw, req, nil)	
-		if err != nil {
-				log.Println(err)
-				return nil
-		}
-
-		//fmt.Printf("%+v\n", wsConn)
-		clientConn.webSocket = wsConn
-
-		go func() {
-			for {
-				_, data, err := wsConn.ReadMessage()
-				if err != nil {
-					wsConn.Close()
-					chanWebsocketComplete <- true
-					return
-				}
-				EncodeProtobufAndSend(data, s, clientConn)
+		if req.Header.Get("Upgrade") != "" {
+			return 2, HandleWebsocketUpgrade(req, rw, clientConn, s)
+		} else {
+			if subFS == nil {
+				http.NotFound(rw, req)
+			} else {
+				http.ServeFileFS(rw, req, subFS, match[1])
 			}
-		}()
-
-		return chanWebsocketComplete
+			return 3, nil
+		}		
 	}
 
-	return nil
+	return 1, nil
+}
+
+func HandleWebsocketUpgrade(req *http.Request, rw *CustomResponseWriter, clientConn *ClientConnection, s *streamer) chan int {
+	wsConn, err := upgrader.Upgrade(rw, req, nil)	
+	if err != nil {
+			log.Println(err)
+			return nil
+	}
+
+	//fmt.Printf("%+v\n", wsConn)
+	clientConn.webSocket = wsConn
+	chanWsComplete := make(chan int)
+
+	go func() {
+		for {
+			_, data, err := wsConn.ReadMessage()
+			if err != nil {
+				wsConn.Close()
+				chanWsComplete <- 1
+				return
+			}
+			EncodeProtobufAndSend(data, s, clientConn)
+		}
+	}()
+
+	return chanWsComplete
 }
 
 func getHttpRequest(readBuf []byte) *http.Request {

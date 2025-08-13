@@ -5,10 +5,11 @@ import (
   "os"
   "io"
   "fmt"
-  "log"
+  //"log"
   "time"
   "bytes"
-  "strings"
+  "errors"
+  "strings"	
   "path/filepath"
 
   "go.bug.st/serial"
@@ -54,14 +55,14 @@ func (s *streamer) Init(addr string) error {
 func FindSerialDevice() string {
   entries, err := os.ReadDir("/dev/serial/by-id")
   if err != nil {
-    log.Fatal(err)
+    return ""
   }
   var fullPath string
   for _, entry := range entries {
     if strings.Index(entry.Name(), "CP2104") >= 0 || strings.Index(entry.Name(), "RAKwireless") >= 0 || strings.Index(entry.Name(), "Seeed_Studio") >= 0 {
       fullPath, err = filepath.EvalSymlinks("/dev/serial/by-id/" + entry.Name())
       if err != nil {
-        panic(err)
+        return ""
       }
       break
     }
@@ -77,6 +78,9 @@ func (s *streamer) Reconnect() error {
   time.Sleep(1 * time.Second)
   
   s.address = FindSerialDevice()
+  if s.address == "" {
+    return errors.New("no serial device detected")
+  }
 
   mode := &serial.Mode{
     BaudRate: 115200,

@@ -24,6 +24,11 @@ Because I have an externally mounted RAK Wisblock device paired with a Raspberry
 
 * In the event your meshtastic device gets corrupted or resets you have a backup of your node list
 
+### Support clients
+* Meshtastic android app (using TCP screen), I assume iOS should also work if it has the same screen
+* MeshUI via Websockets (mentioned above)
+* Meshtastic.Network.Management.Client via the TCP connection screen
+
 ### Notes
 Currently only supports Linux due to use of TCP_INFO for detecting broken connections, making it work in Windows or MacOS wouldn't take long.
 
@@ -31,4 +36,4 @@ There is no security or authorization, it's a straight through proxy. Anyone tha
 
 On some devices like RAK, establishing a serial connection appears to disable the bluetooth. So if you use this tool you may not be able to connect via bluetooth. Power cycle the node to allow bluetooth again.
 
-Websocket support is not fully complete. It will send all packets to the websocket, but only WantConfigId is currently supported going to the radio.
+Websockets can currently only send WantConfigId and ToRadio_Packet data to the device. This is enough to request the node list and send messages.

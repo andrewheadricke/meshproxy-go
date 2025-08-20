@@ -31,7 +31,9 @@ func (c *ClientConnection) Close() {
   if c.connType == 1 {
     c.rawConn.Close()
   } else {
-    c.webSocket.Close()
+    if (c.webSocket != nil) {
+      c.webSocket.Close()
+    }
   }
 }
 
@@ -124,7 +126,7 @@ func HandleTcpConnection(s *streamer, conn net.Conn) {
       } else {
         buf = append(buf, tmpBuf...)
 
-				var connType int
+        var connType int
         connType, chanWsComplete = CheckForHttpRequest(buf, &newConn, s)
         if connType == 2 {
           fmt.Printf("Switching to Websocket\n")
@@ -132,9 +134,9 @@ func HandleTcpConnection(s *streamer, conn net.Conn) {
           //fmt.Printf("%+v\n", *connections[0])
           break
         } else if connType == 3 {
-					//fmt.Printf("Detected HTTP request\n")
-					break
-				}
+          //fmt.Printf("Detected HTTP request\n")
+          break
+        }
 
         if err := CheckAndSendClientHandshake(buf, newConn.rawConn); err == nil {
           //fmt.Printf("client handshake complete\n")

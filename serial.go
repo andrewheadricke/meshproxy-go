@@ -197,12 +197,20 @@ func chanFromNode(conn *io.ReadWriteCloser) (chan []byte, chan string) {
         }
 
         if pktSize == 0 && len(buf) == 4 {
+          //fmt.Printf("buf is %+v\n", buf)
           pktSize = int((buf[2] << 8) + buf[3])
           //fmt.Printf("--> packet header length %d\n", pktSize)
+          if pktSize == 0 {
+            fmt.Printf("got zero size packet, wierd!\n")
+            buf = make([]byte, 0)
+            continue
+          }
         }
 
         if pktSize > 0 {
           buf = append(buf, b...)
+
+          //fmt.Printf("buf is now %+v\n%s\n", buf, string(buf))
 
           if len(buf) >= pktSize + 4 {
             //fmt.Printf("full packet found %+v\n", buf)

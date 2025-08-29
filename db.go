@@ -60,8 +60,9 @@ func DumpMessages() {
     b := tx.Bucket([]byte("messages"))
     c := b.Cursor()
     for k, v := c.First(); k != nil; k, v = c.Next() {
+			//fmt.Printf("%+v %+v\n", k, v)
       pkt := pb.FromRadio{}
-      if err := proto.Unmarshal(v, &pkt); err != nil {
+      if err := proto.Unmarshal(v[4:], &pkt); err != nil {
         fmt.Printf("Error unmarshalling: %+v\n", err)
       } else {
         timestamp := binary.LittleEndian.Uint32(k)
@@ -244,4 +245,29 @@ func IterateMessagesFromDb(cb func(n []byte)) {
     }
     return nil
   })
+}
+
+func ClearUnknownNodesFromDb() {
+	db.Update(func(tx *bolt.Tx) error {
+
+		counter := 0
+    b := tx.Bucket([]byte("nodes"))
+    c := b.Cursor()
+    for k, v := c.First(); k != nil; k, v = c.Next() {			
+      nodeInfo := pb.NodeInfo{}
+      if err := proto.Unmarshal(v, &nodeInfo); err != nil {
+        log.Fatal(err)
+      }
+
+			if nodeInfo.User.Macaddr == nil {
+				counter++
+				//fmt.Printf("%+v\n", nodeInfo)
+				b.Delete(k)
+			}
+		}
+
+		fmt.Printf("removed %d unknown nodes\n", counter)
+
+		return nil
+	})
 }

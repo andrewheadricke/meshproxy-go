@@ -17,6 +17,7 @@ var showPacketsFlag bool
 var indexFlag bool
 var removeNodeFlag string
 var deviceNodesFlag bool
+var clearUnknownFlag bool
 
 var shuttingDown = false
 
@@ -28,6 +29,7 @@ func main() {
   flag.BoolVar(&logFlag, "log", false, "show device log output")
   flag.BoolVar(&showPacketsFlag, "showpackets", false, "show packets on output")
   flag.BoolVar(&deviceNodesFlag, "devicenodes", false, "use device nodes instead of local db")
+	flag.BoolVar(&clearUnknownFlag, "clear-unknown", false, "remove unknown nodes from db")
   //flag.BoolVar(&indexFlag, "index", false, "index nodes")
   flag.Parse()  // after declaring flags we need to call it
 
@@ -42,6 +44,11 @@ func main() {
 
   shutdownDone := ListenForShutdown(s, l)
   InitDb()
+
+	if clearUnknownFlag {
+		ClearUnknownNodesFromDb()
+		os.Exit(0)
+	}
 
   if len(dbDumpFlag) > 0 {
     DumpDb(dbDumpFlag)
